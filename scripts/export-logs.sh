@@ -141,6 +141,8 @@ copy_bounded() {
 }
 
 copy_bounded "$state_root/status.json" status.json 131072
+copy_bounded "$state_root/update-status.txt" update-status.txt 4096
+copy_bounded "$state_root/update.log" update.log 262144
 copy_bounded "$state_root/baseline.json" baseline.json 131072
 copy_bounded "$config_root/settings.ini" settings.ini 65536
 copy_bounded "$script_dir/build-id.txt" build-id.txt 4096

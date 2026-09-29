@@ -2,20 +2,23 @@
 set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/build-common.sh"
 test_only=false
+steam_build=OFF
 release_version=''
 while (( $# )); do
     case $1 in
         --test-only) test_only=true; shift ;;
+        --steam) steam_build=ON; shift ;;
         --version)
             (( $# >= 2 )) || die '--version requires a version'
             release_version=$2
             valid_release_version "$release_version" || die 'Expected a version such as 0.1.0 or 0.2.0-beta.1'
             shift 2 ;;
         --help|-h)
-            printf '%s\n' 'Usage: bash build.sh [--test-only] [--version VERSION]' \
+            printf '%s\n' 'Usage: bash build.sh [--test-only] [--steam] [--version VERSION]' \
                 'Run host tests, then build and package the ARM64 Steam Frame application.' \
                 'Hosts: x86_64 Linux or Windows Git Bash. Requires CMake 3.20+, Ninja, g++, curl, GNU readelf, tar, and sha256sum.' \
                 'Compiler extraction also needs xz on Linux or unzip on Windows.' \
+                '--steam disables the built-in release updater; Steam manages updates.' \
                 '--version accepts 0.1.0 or 0.2.0-beta.1; omitted uses the CMake development version.'
             exit 0 ;;
         *) die "Unknown argument: $1" ;;
@@ -37,6 +40,7 @@ host_compiler=$(command -v g++)
 [[ ! -f $host_compiler.exe ]] || host_compiler=$host_compiler.exe
 run_cmake -S "$(native_path "$project_root")" -B "$(native_path "$host_build")" -G Ninja \
     -DFRAME_BUILD_APP=OFF -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Debug \
+    "-DFRAME_STEAM_BUILD=$steam_build" \
     "-DFRAME_RELEASE_VERSION=$release_version" "-DCMAKE_CXX_COMPILER=$(native_path "$host_compiler")"
 run_cmake --build "$(native_path "$host_build")"
 ctest --test-dir "$(native_path "$host_build")" --output-on-failure
@@ -89,6 +93,7 @@ fi
 run_cmake -S "$(native_path "$project_root")" -B "$(native_path "$cross_build")" -G Ninja \
     -UCMAKE_CXX_ARCHIVE_CREATE -UCMAKE_CXX_ARCHIVE_FINISH \
     -DFRAME_BUILD_APP=ON -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release \
+    "-DFRAME_STEAM_BUILD=$steam_build" \
     "-DFRAME_RELEASE_VERSION=$release_version" \
     -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
     "-DCMAKE_CXX_COMPILER=$(native_path "$zig")" -DCMAKE_CXX_COMPILER_ARG1=c++ \
@@ -112,6 +117,7 @@ done
 cp -- "$project_root/vendor/vulkan/LICENSE.md" "$licenses/vulkan.txt"
 cp -- "$project_root/vendor/lucide/LICENSE" "$licenses/lucide.txt"
 cp -- "$project_root/vendor/nanosvg/LICENSE.txt" "$licenses/nanosvg.txt"
+cp -- "$project_root/vendor/nlohmann/LICENSE.MIT" "$licenses/nlohmann-json.txt"
 cp -- "$project_root/vendor/inter/LICENSE.txt" "$licenses/inter.txt"
 cp -- "$project_root/vendor/spdlog/LICENSE.fmt" "$licenses/spdlog-fmt.txt"
 for license_name in Apache-2.0 MIT; do

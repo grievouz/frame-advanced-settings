@@ -53,6 +53,12 @@
       "name": "nanosvg",
       "repository": "https://github.com/memononen/nanosvg",
       "revision": "239e102ec2c691f2902e20ace2ed36ee4a35cfe6"
+    },
+    {
+      "name": "nlohmann-json",
+      "repository": "https://github.com/nlohmann/json",
+      "revision": "55f93686c01528224f448c19128836e7df245f72",
+      "version": "3.12.0"
     }
   ],
   "files": [
@@ -611,6 +617,14 @@
     {
       "path": "vendor/lucide/mic.svg",
       "sha256": "9b940cd735d1ffa270ba670c4e677d9a09400f3fa81d6b3f405b12a3b67a59a8"
+    },
+    {
+      "path": "vendor/nlohmann/json.hpp",
+      "sha256": "aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de63"
+    },
+    {
+      "path": "vendor/nlohmann/LICENSE.MIT",
+      "sha256": "46a65cffd1ea955132d95a8dd921640714a8d6b537d2e4e482d31145ae95b603"
     }
   ]
 }

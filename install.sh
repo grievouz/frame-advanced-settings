@@ -2,6 +2,11 @@
 set -eu
 
 die() { printf '%s\n' "$*" >&2; exit 1; }
+backup_record=''
+if [ "$#" -gt 0 ]; then
+    [ "$#" = 2 ] && [ "$1" = --backup-record ] || die 'Unknown install argument'
+    backup_record=$2
+fi
 if [ -z "${HOME:-}" ] || [ "$HOME" = / ]; then die 'Invalid HOME'; fi
 if [ "$(uname -m)" != aarch64 ]; then die 'This package requires an ARM64 Steam Frame.'; fi
 source_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -44,7 +49,6 @@ if [ -n "$loaded_unit" ] || [ -f "$units/$unit" ]; then
     systemctl --user stop "$unit"
     old_pid=$(systemctl --user show "$unit" -p MainPID --value)
     [ "${old_pid:-0}" = 0 ] || die "$unit is still running; installation stopped."
-    systemctl --user disable "$unit"
 fi
 
 # Service status does not catch an app launched directly. Hold its existing
@@ -63,6 +67,7 @@ mkdir -p "$staging/lib" "$staging/input" "$staging/licenses" "$staging/assets/fo
 cp "$source_dir/$app" "$source_dir/$app.vrmanifest" "$source_dir/README.md" "$staging/"
 cp "$source_dir/build-id.txt" "$source_dir/$app.sha256" "$source_dir/verify-running.sh" "$staging/"
 cp "$source_dir/export-logs.sh" "$source_dir/collect-logs.sh" "$source_dir/microphone-setup.sh" "$staging/"
+cp "$source_dir/update.sh" "$staging/"
 cp "$source_dir/contrib/wireplumber/"* "$staging/contrib/wireplumber/"
 cp "$source_dir/lib/libopenvr_api.so" "$staging/lib/"
 cp "$source_dir/input/"*.json "$staging/input/"
@@ -82,6 +87,9 @@ archive_path() {
     fi
 }
 archive_path "$destination"
+if [ -n "$backup_record" ] && [ -d "$destination.backup.$stamp" ]; then
+    printf '%s\n' "$destination.backup.$stamp" > "$backup_record"
+fi
 mv -- "$staging" "$destination"
 mkdir -p "$units" "$desktop"
 cp "$source_dir/contrib/$app.service" "$units/"
@@ -96,6 +104,6 @@ systemctl --user daemon-reload
 if ! sh "$destination/microphone-setup.sh"; then
     echo "App installed; microphone setup was skipped. See the reason above." >&2
 fi
-echo 'Installed Frame Advanced Settings. Autostart is off; saved movement choice is restored on launch.'
+echo 'Installed Frame Advanced Settings. Your startup choice and saved settings are preserved.'
 echo 'Open it from Launch program (+), or run: systemctl --user reload-or-restart frame-advanced-settings'
 echo 'Logs: journalctl --user -u frame-advanced-settings -n 80 --no-pager'

@@ -57,6 +57,7 @@ jobs:
       - name: Test installers and package validation
         run: |
           bash tests/install_test.sh
+          bash tests/update_install_test.sh
           bash tests/install_transfer_test.sh
           bash tests/microphone_setup_test.sh
           bash tests/build_scripts_test.sh

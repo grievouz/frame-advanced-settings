@@ -10,7 +10,7 @@ cp "$project/install.sh" "$package/"
 cp -R "$project/contrib/"* "$package/contrib/"
 cp "$project/scripts/microphone-setup.sh" "$package/"
 for file in frame-advanced-settings frame-advanced-settings.vrmanifest README.md build-id.txt \
-    verify-running.sh export-logs.sh collect-logs.sh LICENSE \
+    verify-running.sh export-logs.sh collect-logs.sh update.sh LICENSE \
     lib/libopenvr_api.so input/actions.json assets/fonts/font.ttf licenses/license.txt \
     assets/icons/frame-advanced-settings.png assets/icons/frame-advanced-settings.svg; do
     printf 'fixture %s\n' "$file" > "$package/$file"
@@ -89,7 +89,7 @@ assert_text "$config/frame-advanced-settings/settings.ini" 'drag_gain=3'
 assert_text "$state/frame-advanced-settings/logs/session-one/events.jsonl" 'saved log survives'
 assert_text "$data/frame-advanced-settings/frame-advanced-settings" 'fixture frame-advanced-settings'
 assert_text "$commands" 'stop frame-advanced-settings.service'
-assert_text "$commands" 'disable frame-advanced-settings.service'
+! grep -qE 'systemctl --user (disable|enable) ' "$commands"
 assert_text "$commands" 'flock -n 9'
 compgen -G "$data/frame-advanced-settings.backup.*/frame-advanced-settings" > /dev/null
 
