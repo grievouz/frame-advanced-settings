@@ -5,7 +5,7 @@ PartOf=steamvr.service
 
 [Service]
 Type=simple
-ExecStart=%h/.local/share/frame-advanced-settings/frame-advanced-settings
+ExecStart=%h/.local/share/frame-advanced-settings/frame-advanced-settings --background
 ExecReload=/usr/bin/touch %h/.local/share/frame-advanced-settings/show-dashboard
 Restart=no
 TimeoutStopSec=5

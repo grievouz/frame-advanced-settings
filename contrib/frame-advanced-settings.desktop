@@ -2,7 +2,7 @@
 Type=Application
 Name=Frame Advanced Settings
 Comment=Extra controls for your Steam Frame.
-Exec=systemctl --user reload-or-restart frame-advanced-settings.service
+Exec=sh -c "touch ~/.local/share/frame-advanced-settings/show-dashboard; exec systemctl --user reload-or-restart frame-advanced-settings.service"
 Icon=frame-advanced-settings
 Terminal=false
 Categories=Utility;

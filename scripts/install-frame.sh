@@ -124,6 +124,7 @@ if [ "$probe_result" -ne 0 ] && [ "$probe_result" -ne 10 ]; then exit "$probe_re
 if [ "$1" = true ]; then
     printf '\n--- Starting the dashboard with saved preferences ---\n'
     started_at=$(date +%s)
+    touch "$HOME/.local/share/frame-advanced-settings/show-dashboard"
     start_result=0
     systemctl --user reload-or-restart frame-advanced-settings.service || start_result=$?
     sleep 3
@@ -147,7 +148,7 @@ then
     else
         printf '\nInstalled. Open Frame Advanced Settings from Launch program (+) on the headset.\n'
     fi
-    printf 'Your saved movement choice is restored on launch. No autostart was enabled.\n'
+    printf 'Your saved movement and startup choices are preserved.\n'
 else
     result=$?
     if (( result == 10 )); then

@@ -21,6 +21,7 @@ required=(
     assets/icons/frame-advanced-settings.png assets/icons/frame-advanced-settings.svg
     build-id.txt frame-advanced-settings.sha256 verify-running.sh export-logs.sh collect-logs.sh
     microphone-setup.sh contrib/wireplumber/frame-advanced-settings-mic.lua
+    update.sh licenses/nlohmann-json.txt
     contrib/wireplumber/90-frame-advanced-settings-mic.conf
     licenses/lucide.txt licenses/nanosvg.txt licenses/spdlog.txt licenses/spdlog-fmt.txt
 )
@@ -48,7 +49,7 @@ verify_elf() {
 verify_elf "$package_root/frame-advanced-settings" /lib/ld-linux-aarch64.so.1
 verify_elf "$package_root/lib/libopenvr_api.so" ''
 metadata manifest "-DPACKAGE_ROOT=$(native_path "$package_root")"
-for relative in install.sh verify-running.sh export-logs.sh collect-logs.sh microphone-setup.sh \
+for relative in install.sh verify-running.sh export-logs.sh collect-logs.sh microphone-setup.sh update.sh \
     contrib/wireplumber/frame-advanced-settings-mic.lua \
     contrib/wireplumber/90-frame-advanced-settings-mic.conf; do
     if grep -Uq $'\r' "$package_root/$relative"; then

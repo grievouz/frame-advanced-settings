@@ -1,5 +1,7 @@
 #pragma once
+#cmakedefine01 FRAME_STEAM_BUILD
 namespace build {
+inline constexpr bool selfUpdates = !FRAME_STEAM_BUILD;
 inline constexpr const char *version = "@FRAME_APP_VERSION@";
 inline constexpr const char *id = "@FRAME_BUILD_ID@";
 inline constexpr const char *full = "@FRAME_APP_VERSION@+@FRAME_BUILD_ID@";

@@ -24,7 +24,8 @@ struct Preferences {
     bool distanceLimit = false;
     double distanceLimitMeters = 2;
     bool movementEnabled = false;
-    bool detailedLogging = false;
+    bool detailedLogging = true;
+    bool automaticUpdateChecks = true;
 
     static Preferences capture(const Session &session) {
         return {session.engine.xyz,
@@ -47,7 +48,8 @@ struct Preferences {
         return xyz == other.xyz && gain == other.gain && gravity == other.gravity &&
                gravityStrength == other.gravityStrength && distanceLimit == other.distanceLimit &&
                distanceLimitMeters == other.distanceLimitMeters &&
-               movementEnabled == other.movementEnabled && detailedLogging == other.detailedLogging;
+               movementEnabled == other.movementEnabled && detailedLogging == other.detailedLogging &&
+               automaticUpdateChecks == other.automaticUpdateChecks;
     }
 };
 
@@ -129,7 +131,7 @@ inline PreferencesLoad loadPreferences(const std::filesystem::path &path) {
                 if (valid)
                     p.xyz = value == "xyz";
             } else if (key == "drag_gain")
-                valid = preferencesDetail::number(value, p.gain, .25, 2);
+                valid = preferencesDetail::number(value, p.gain, .25, 5);
             else if (key == "gravity_enabled")
                 valid = preferencesDetail::boolean(value, p.gravity);
             else if (key == "gravity_strength")
@@ -142,6 +144,8 @@ inline PreferencesLoad loadPreferences(const std::filesystem::path &path) {
                 valid = preferencesDetail::boolean(value, p.movementEnabled);
             else if (key == "detailed_logging")
                 valid = preferencesDetail::boolean(value, p.detailedLogging);
+            else if (key == "automatic_update_checks")
+                valid = preferencesDetail::boolean(value, p.automaticUpdateChecks);
             // Unknown keys are ignored for forward compatibility.
         }
         if (!valid)
@@ -175,7 +179,8 @@ inline bool savePreferences(const std::filesystem::path &path, const Preferences
            << "distance_limit_enabled=" << p.distanceLimit << '\n'
            << "distance_limit_m=" << p.distanceLimitMeters << '\n'
            << "movement_enabled=" << p.movementEnabled << '\n'
-           << "detailed_logging=" << p.detailedLogging << '\n';
+           << "detailed_logging=" << p.detailedLogging << '\n'
+           << "automatic_update_checks=" << p.automaticUpdateChecks << '\n';
     output.close();
     if (!output) {
         problem = "Cannot write settings; previous saved preferences were kept.";

@@ -121,7 +121,7 @@ int main() {
               runtime.calls == 0,
           "first-launch defaults apply without enabling movement or querying the playspace");
     running.engine.xyz = true;
-    running.engine.gain = 1.75;
+    running.engine.gain = 4.75;
     running.gravity.setEnabled(true);
     running.gravity.setStrength(7.8);
     running.setDistanceLimit(false, 18.5);
@@ -135,16 +135,17 @@ int main() {
           "first preference change creates the directory and settings file");
     loaded = loadPreferences(path);
     check(loaded.found && loaded.problem.empty() && loaded.values == preferences,
-          "all preferences including unlimited distance round-trip exactly");
+          "all preferences including drag speed above 2x and unlimited distance round-trip exactly");
     {
         auto diagnosticPreferences = preferences;
-        diagnosticPreferences.detailedLogging = true;
-        check(!defaults.detailedLogging && !(diagnosticPreferences == preferences),
-              "detailed logging defaults off and changes preference identity");
+        diagnosticPreferences.detailedLogging = false;
+        diagnosticPreferences.automaticUpdateChecks = false;
+        check(defaults.detailedLogging && !(diagnosticPreferences == preferences),
+              "detailed logging defaults on and an explicit Off changes preference identity");
         const auto diagnosticPath = root / "diagnostic-settings.ini";
         check(savePreferences(diagnosticPath, diagnosticPreferences, problem) &&
                   loadPreferences(diagnosticPath).values == diagnosticPreferences,
-              "detailed logging choice survives restart");
+              "explicit logging Off and automatic update choices survive restart");
     }
     Session restarted(runtime);
     loaded.values.apply(restarted);
@@ -237,15 +238,15 @@ int main() {
     check(!loaded.values.movementEnabled,
           "old preference files without movement_enabled default to Off");
     write(path, "movement_enabled=true\n");
-    check(loadPreferences(path).values.movementEnabled,
-          "new movement_enabled key restores the explicit preference");
+    check(loadPreferences(path).values.movementEnabled && loadPreferences(path).values.detailedLogging,
+          "saved movement choice restores and missing detailed_logging defaults to On");
     write(path, "movement_enabled=maybe\n");
     loaded = loadPreferences(path);
     check(!loaded.problem.empty() && !loaded.values.movementEnabled,
           "invalid movement choice defaults to Off");
     write(path, "drag_gain=99\ngravity_strength=-1\ndistance_limit_m=10000\n");
     loaded = loadPreferences(path);
-    check(loaded.values.gain == 2 && loaded.values.gravityStrength == 1 &&
+    check(loaded.values.gain == 5 && loaded.values.gravityStrength == 1 &&
               loaded.values.distanceLimitMeters == 100,
           "manual numeric settings remain within supported ranges");
     write(path, "distance_limit_m=inf\ngravity_strength=7,8\n");
