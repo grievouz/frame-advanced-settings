@@ -1,6 +1,6 @@
 #pragma once
 namespace build {
-inline constexpr const char *version = "@PROJECT_VERSION@";
+inline constexpr const char *version = "@FRAME_APP_VERSION@";
 inline constexpr const char *id = "@FRAME_BUILD_ID@";
-inline constexpr const char *full = "@PROJECT_VERSION@+@FRAME_BUILD_ID@";
+inline constexpr const char *full = "@FRAME_APP_VERSION@+@FRAME_BUILD_ID@";
 }

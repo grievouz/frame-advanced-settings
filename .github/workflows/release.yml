@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate version tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+      commit: ${{ steps.release.outputs.commit }}
+      tag_object: ${{ steps.release.outputs.tag_object }}
+      archive: ${{ steps.release.outputs.archive }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Read release metadata
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: bash scripts/release-info.sh "$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: validate
+    uses: ./.github/workflows/build.yml
+    with:
+      version: ${{ needs.validate.outputs.version }}
+
+  publish:
+    name: Publish GitHub release
+    needs: [validate, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: linux-aarch64-package
+          path: release-assets
+      - name: Publish verified assets
+        working-directory: release-assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          TAG_OBJECT: ${{ needs.validate.outputs.tag_object }}
+          ARCHIVE: ${{ needs.validate.outputs.archive }}
+          PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_tag=$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')
+          [[ "$remote_tag" == "$TAG_OBJECT" ]] || { echo 'Release tag changed during the build' >&2; exit 1; }
+          sha256sum --check "$ARCHIVE.sha256"
+          flags=()
+          if [[ "$PRERELEASE" == true ]]; then flags+=(--prerelease --latest=false); fi
+          gh release create "$RELEASE_TAG" "$ARCHIVE" "$ARCHIVE.sha256" \
+            --verify-tag --generate-notes --title "$RELEASE_TAG" "${flags[@]}"

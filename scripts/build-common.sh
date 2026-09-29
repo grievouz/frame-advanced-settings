@@ -4,6 +4,8 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 project_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
 
 die() { printf '%s\n' "$*" >&2; exit 1; }
+release_version_pattern='(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-beta\.[1-9][0-9]*)?'
+valid_release_version() { [[ $1 =~ ^${release_version_pattern}$ ]]; }
 require_tools() {
     local tool
     for tool in "$@"; do

@@ -57,7 +57,7 @@ for relative in install.sh verify-running.sh export-logs.sh collect-logs.sh micr
 done
 build_id=$(< "$package_root/build-id.txt")
 build_id=${build_id%$'\r'}
-[[ $build_id =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[a-f0-9]{12}$ ]] || die 'Invalid build identity'
+[[ $build_id =~ ^${release_version_pattern}\+[a-f0-9]{12}$ ]] || die 'Invalid build identity'
 grep -UaFq -- "$build_id" "$package_root/frame-advanced-settings" || die 'Packaged build ID does not match the executable'
 binary_hash=$(sha256sum "$package_root/frame-advanced-settings")
 binary_hash=${binary_hash%% *}

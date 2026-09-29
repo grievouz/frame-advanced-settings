@@ -1,0 +1,64 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Linux ARM64 build and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build g++ binutils curl xz-utils lua5.4
+      - name: Check shell scripts and release validation
+        run: |
+          for script in install.sh scripts/*.sh tests/*.sh; do bash -n "$script"; done
+          bash tests/release_test.sh
+      - name: Build and test
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          args=()
+          if [[ -n "$RELEASE_VERSION" ]]; then args+=(--version "$RELEASE_VERSION"); fi
+          bash scripts/build.sh "${args[@]}"
+      - name: Test installers and package validation
+        run: |
+          bash tests/install_test.sh
+          bash tests/install_transfer_test.sh
+          bash tests/microphone_setup_test.sh
+          bash tests/build_scripts_test.sh
+          cd dist
+          sha256sum --check ./*.tar.gz.sha256
+          mkdir unpacked
+          tar -xzf ./*.tar.gz -C unpacked
+          bash ../scripts/verify-package.sh unpacked/frame-advanced-settings
+      - name: Save package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-aarch64-package
+          path: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

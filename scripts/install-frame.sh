@@ -37,7 +37,18 @@ done
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 project_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
-archive=frame-advanced-settings-0.1.0-aarch64.tar.gz
+build_id_file=$project_root/dist/frame-advanced-settings/build-id.txt
+if [[ ! -f $build_id_file ]]; then
+    printf 'Built package identity missing. Build the package first.\n' >&2
+    exit 1
+fi
+build_id=$(< "$build_id_file")
+version=${build_id%%+*}
+if [[ ! $version =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-beta\.[1-9][0-9]*)?$ ]]; then
+    printf 'Invalid built package version.\n' >&2
+    exit 1
+fi
+archive=frame-advanced-settings-$version-linux-aarch64.tar.gz
 checksum=$archive.sha256
 if [[ ! -f $project_root/dist/$archive || ! -f $project_root/dist/$checksum ]]; then
     printf 'Built package/checksum missing in %s/dist. Build the package first.\n' "$project_root" >&2

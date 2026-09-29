@@ -27,7 +27,9 @@ cat > "$payload/verify-running.sh" <<'EOF'
 exit "${TEST_VERIFY_FAIL:-0}"
 EOF
 printf 'fixture library\n' > "$payload/lib/libopenvr_api.so"
-archive=frame-advanced-settings-0.1.0-aarch64.tar.gz
+mkdir -p "$client/dist/frame-advanced-settings"
+printf '0.2.0-beta.3+012345abcdef\n' > "$client/dist/frame-advanced-settings/build-id.txt"
+archive=frame-advanced-settings-0.2.0-beta.3-linux-aarch64.tar.gz
 tar -czf "$client/dist/$archive" -C "$test_root/payload" frame-advanced-settings
 (cd "$client/dist" && sha256sum "$archive" > "$archive.sha256")
 real_mktemp=$(command -v mktemp)

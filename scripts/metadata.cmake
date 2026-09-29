@@ -34,8 +34,11 @@ if(MODE STREQUAL "dependencies")
 elseif(MODE STREQUAL "toolchain")
   file(READ "${PROJECT_ROOT}/dependencies.lock.json" lock)
   string(JSON version GET "${lock}" toolchains zig version)
-  string(JSON url GET "${lock}" toolchains zig url)
-  string(JSON sha GET "${lock}" toolchains zig sha256)
+  if(NOT DEFINED TOOLCHAIN_HOST)
+    message(FATAL_ERROR "TOOLCHAIN_HOST is required")
+  endif()
+  string(JSON url GET "${lock}" toolchains zig hosts "${TOOLCHAIN_HOST}" url)
+  string(JSON sha GET "${lock}" toolchains zig hosts "${TOOLCHAIN_HOST}" sha256)
   string(LENGTH "${sha}" hash_length)
   if(NOT version MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$" OR
      NOT url MATCHES "^https://[^\r\n]+$" OR
