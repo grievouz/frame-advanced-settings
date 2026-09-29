@@ -30,6 +30,19 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build g++ binutils curl xz-utils lua5.4
+      - name: Read pinned Zig archive
+        id: zig
+        run: |
+          source scripts/build-common.sh
+          toolchain=$(metadata toolchain -DTOOLCHAIN_HOST=x86_64-linux)
+          mapfile -t fields <<< "$toolchain"
+          (( ${#fields[@]} == 3 )) || die 'Unexpected toolchain metadata'
+          printf 'archive=tools/%s\nsha256=%s\n' "${fields[1]##*/}" "${fields[2]}" >> "$GITHUB_OUTPUT"
+      - name: Cache Zig download
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.zig.outputs.archive }}
+          key: zig-download-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.zig.outputs.sha256 }}
       - name: Check shell scripts and release validation
         run: |
           for script in install.sh scripts/*.sh tests/*.sh; do bash -n "$script"; done
