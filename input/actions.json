@@ -1,0 +1,10 @@
+{
+  "action_sets": [{"name":"/actions/drag","usage":"leftright"}],
+  "actions": [
+    {"name":"/actions/drag/in/move","type":"boolean","requirement":"optional"},
+    {"name":"/actions/drag/in/reset","type":"boolean","requirement":"optional"},
+    {"name":"/actions/drag/in/gravity","type":"boolean","requirement":"optional"}
+  ],
+  "default_bindings": [{"controller_type":"frame_controller","binding_url":"bindings_frame.json"}],
+  "localization": [{"language_tag":"en_US","/actions/drag":"Frame Advanced Settings","/actions/drag/in/move":"Drag playspace (hold)","/actions/drag/in/reset":"Reset offset","/actions/drag/in/gravity":"Toggle gravity"}]
+}

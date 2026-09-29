@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <title>Frame Advanced Settings</title>
+  <path d="M104 48V24H24V104H48" fill="none" stroke="#ffffff" stroke-width="16" stroke-linecap="butt" stroke-linejoin="miter"/>
+  <circle cx="88" cy="88" r="24" fill="#1a9fff"/>
+</svg>

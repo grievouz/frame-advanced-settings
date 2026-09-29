@@ -1,0 +1,12 @@
+{
+  "source": "builtin",
+  "applications": [{
+    "app_key": "local.frame-space-drag",
+    "launch_type": "binary",
+    "binary_path_linux_arm": "frame-advanced-settings",
+    "is_dashboard_overlay": true,
+    "action_manifest_path": "input/actions.json",
+    "image_path": "assets/icons/frame-advanced-settings.png",
+    "strings": {"en_us":{"name":"Frame Advanced Settings","description":"Extra controls for your Steam Frame."}}
+  }]
+}

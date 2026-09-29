@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Frame Advanced Settings
+Comment=Extra controls for your Steam Frame.
+Exec=systemctl --user reload-or-restart frame-advanced-settings.service
+Icon=frame-advanced-settings
+Terminal=false
+Categories=Utility;
+X-SteamVR-Overlay=true

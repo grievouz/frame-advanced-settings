@@ -1,0 +1,29 @@
+# Generated builds, packages, and downloaded development tools.
+/build/
+/cmake-build-*/
+/dist/
+/tools/
+/reference/
+/CMakeUserPresets.json
+
+# Local diagnostic captures, logs, and authentication files.
+/diagnostics/
+/logs/
+/auth/
+*.log
+.env
+.env.*
+!.env.example
+
+# Editor and operating-system files.
+/.vs/
+*.user
+*.suo
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Generated preview images belong under build/. Source icons stay tracked.
+*.ppm

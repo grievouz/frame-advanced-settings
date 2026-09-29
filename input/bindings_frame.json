@@ -1,0 +1,15 @@
+{
+  "action_manifest_version": 0,
+  "app_key": "local.frame-space-drag",
+  "controller_type": "frame_controller",
+  "name": "Frame Advanced Settings default",
+  "description": "Hold left bumper to drag; right thumbstick click to reset.",
+  "bindings": {
+    "/actions/drag": {
+      "sources": [
+        {"path":"/user/hand/left/input/bumper","mode":"button","inputs":{"click":{"output":"/actions/drag/in/move"}}},
+        {"path":"/user/hand/right/input/thumbstick","mode":"button","inputs":{"click":{"output":"/actions/drag/in/reset"}}}
+      ]
+    }
+  }
+}
