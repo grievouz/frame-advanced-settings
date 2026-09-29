@@ -131,7 +131,7 @@ inline PreferencesLoad loadPreferences(const std::filesystem::path &path) {
                 if (valid)
                     p.xyz = value == "xyz";
             } else if (key == "drag_gain")
-                valid = preferencesDetail::number(value, p.gain, .25, 2);
+                valid = preferencesDetail::number(value, p.gain, .25, 5);
             else if (key == "gravity_enabled")
                 valid = preferencesDetail::boolean(value, p.gravity);
             else if (key == "gravity_strength")

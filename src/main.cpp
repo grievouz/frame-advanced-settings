@@ -1097,7 +1097,7 @@ static int run(const fs::path &root, bool background) {
                         session.engine.release();
                         break;
                     case Command::Faster:
-                        session.engine.gain = std::min(2., session.engine.gain + .25);
+                        session.engine.gain = std::min(5., session.engine.gain + .25);
                         session.engine.release();
                         break;
                     case Command::LimitOff:
