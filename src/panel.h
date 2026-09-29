@@ -67,7 +67,7 @@ struct PanelState {
     std::string notice;
     std::string appVersion = "Unavailable", buildId = "Unavailable", buildTarget = "Unavailable";
     std::string openVRVersion = "Unavailable", runtimeVersion = "Unavailable";
-    bool debugLogging = false;
+    bool debugLogging = true;
     bool startup = false, startupAvailable = false, startupBusy = false;
     bool selfUpdates = true, automaticUpdateChecks = true, updateBusy = false, updateAvailable = false;
     std::string startupStatus, updateStatus;

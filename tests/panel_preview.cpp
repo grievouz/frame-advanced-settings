@@ -154,7 +154,7 @@ int main(int argc, char **argv) {
         check(panel.hit(directionX, 180, resets) == Command::None,
               "Restoring defaults removes the reset target immediately");
         resets.page = PanelPage::Settings;
-        resets.debugLogging = true;
+        resets.debugLogging = false;
         check(resetX(Command::ResetDebugLogging, 460) > 400 &&
                   resetX(Command::ResetGain, 259) == -1,
               "Logging reset is page scoped");

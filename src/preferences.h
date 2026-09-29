@@ -24,7 +24,7 @@ struct Preferences {
     bool distanceLimit = false;
     double distanceLimitMeters = 2;
     bool movementEnabled = false;
-    bool detailedLogging = false;
+    bool detailedLogging = true;
     bool automaticUpdateChecks = true;
 
     static Preferences capture(const Session &session) {

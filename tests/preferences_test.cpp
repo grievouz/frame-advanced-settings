@@ -138,14 +138,14 @@ int main() {
           "all preferences including drag speed above 2x and unlimited distance round-trip exactly");
     {
         auto diagnosticPreferences = preferences;
-        diagnosticPreferences.detailedLogging = true;
+        diagnosticPreferences.detailedLogging = false;
         diagnosticPreferences.automaticUpdateChecks = false;
-        check(!defaults.detailedLogging && !(diagnosticPreferences == preferences),
-              "detailed logging defaults off and changes preference identity");
+        check(defaults.detailedLogging && !(diagnosticPreferences == preferences),
+              "detailed logging defaults on and an explicit Off changes preference identity");
         const auto diagnosticPath = root / "diagnostic-settings.ini";
         check(savePreferences(diagnosticPath, diagnosticPreferences, problem) &&
                   loadPreferences(diagnosticPath).values == diagnosticPreferences,
-              "logging and automatic update choices survive restart");
+              "explicit logging Off and automatic update choices survive restart");
     }
     Session restarted(runtime);
     loaded.values.apply(restarted);
@@ -238,8 +238,8 @@ int main() {
     check(!loaded.values.movementEnabled,
           "old preference files without movement_enabled default to Off");
     write(path, "movement_enabled=true\n");
-    check(loadPreferences(path).values.movementEnabled,
-          "new movement_enabled key restores the explicit preference");
+    check(loadPreferences(path).values.movementEnabled && loadPreferences(path).values.detailedLogging,
+          "saved movement choice restores and missing detailed_logging defaults to On");
     write(path, "movement_enabled=maybe\n");
     loaded = loadPreferences(path);
     check(!loaded.problem.empty() && !loaded.values.movementEnabled,
