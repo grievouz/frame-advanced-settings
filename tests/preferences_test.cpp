@@ -139,12 +139,13 @@ int main() {
     {
         auto diagnosticPreferences = preferences;
         diagnosticPreferences.detailedLogging = true;
+        diagnosticPreferences.automaticUpdateChecks = false;
         check(!defaults.detailedLogging && !(diagnosticPreferences == preferences),
               "detailed logging defaults off and changes preference identity");
         const auto diagnosticPath = root / "diagnostic-settings.ini";
         check(savePreferences(diagnosticPath, diagnosticPreferences, problem) &&
                   loadPreferences(diagnosticPath).values == diagnosticPreferences,
-              "detailed logging choice survives restart");
+              "logging and automatic update choices survive restart");
     }
     Session restarted(runtime);
     loaded.values.apply(restarted);

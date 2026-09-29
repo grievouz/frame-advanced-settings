@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-enum class PanelPage { SpaceDrag, LaunchMenu, Microphone, Settings, About };
+enum class PanelPage { SpaceDrag, LaunchMenu, Microphone, Settings };
 enum class Command {
     None,
     Disable,
@@ -30,7 +30,6 @@ enum class Command {
     PageLaunchMenu,
     PageMicrophone,
     PageSettings,
-    PageAbout,
     DebugLoggingOff,
     DebugLoggingOn,
     ExportLogs,
@@ -40,7 +39,9 @@ enum class Command {
     LaunchHide0, LaunchShow0, LaunchHide1, LaunchShow1, LaunchHide2, LaunchShow2,
     LaunchHide3, LaunchShow3, LaunchHide4, LaunchShow4, LaunchHide5, LaunchShow5,
     ResetDirection, ResetGain, ResetLimit, ResetGravity, ResetDebugLogging,
-    MicResetEcho, MicResetNoise
+    MicResetEcho, MicResetNoise,
+    SettingsUp, SettingsDown, StartupOff, StartupOn,
+    AutoUpdateOff, AutoUpdateOn, CheckUpdate, InstallUpdate, ResetAutoUpdate
 };
 struct LaunchRow {
     std::string name;
@@ -67,6 +68,10 @@ struct PanelState {
     std::string appVersion = "Unavailable", buildId = "Unavailable", buildTarget = "Unavailable";
     std::string openVRVersion = "Unavailable", runtimeVersion = "Unavailable";
     bool debugLogging = false;
+    bool startup = false, startupAvailable = false, startupBusy = false;
+    bool selfUpdates = true, automaticUpdateChecks = true, updateBusy = false, updateAvailable = false;
+    std::string startupStatus, updateStatus;
+    int settingsScroll = 0;
     std::string loggingStatus, exportStatus;
     bool launchEnabled = false, launchBusy = false, launchLoaded = false;
     size_t launchPage = 0, launchPages = 1;
@@ -81,6 +86,7 @@ struct PanelState {
 };
 struct Panel {
     static constexpr int width = 1600, height = 900;
+    static constexpr int settingsScrollMax = 230;
     // SteamVR's settings panel uses 16:9 and a 1.5 m base dashboard height.
     // The runtime applies the user's dashboard distance/scale around this.
     static constexpr float widthMeters = 1.5f * width / height;
@@ -99,6 +105,7 @@ struct Panel {
   private:
     struct Fonts;
     std::unique_ptr<Fonts> fonts_;
+    int scrollY_ = 0, clipTop_ = 0, clipBottom_ = height;
     void blend(int x, int y, uint32_t color, float alpha);
     void rect(int x, int y, int w, int h, uint32_t color);
     void rounded(int x, int y, int w, int h, int radius, uint32_t color);

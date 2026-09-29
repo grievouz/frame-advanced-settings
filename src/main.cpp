@@ -12,6 +12,7 @@
 #include "log_export.h"
 #include "launch_menu_controller.h"
 #include "microphone_controller.h"
+#include "settings_controller.h"
 #include "app_registration.h"
 #include <chrono>
 #include <csignal>
@@ -759,7 +760,7 @@ static int probe() {
     vr::VR_Shutdown();
     return ok ? 0 : 10;
 }
-static int run(const fs::path &root) {
+static int run(const fs::path &root, bool background) {
     std::string error;
     vr::EVRInitError initError = vr::VRInitError_None;
     vr::VR_Init(&initError, vr::VRApplication_Utility);
@@ -799,6 +800,7 @@ static int run(const fs::path &root) {
     Session session(spaceAccess);
     fs::path preferencesFile;
     drag::Preferences savedPreferences;
+    bool automaticUpdateChecks = true;
     bool preferencesReady = false;
     std::string preferencesProblem;
     auto nextPreferencesSave = Clock::now();
@@ -807,6 +809,7 @@ static int run(const fs::path &root) {
             return;
         auto current = drag::Preferences::capture(session);
         current.detailedLogging = sessionlog::detailed();
+        current.automaticUpdateChecks = automaticUpdateChecks;
         if (current == savedPreferences) {
             preferencesProblem.clear();
             return;
@@ -860,8 +863,10 @@ static int run(const fs::path &root) {
         const auto loadedPreferences = drag::loadPreferences(preferencesFile);
         loadedPreferences.values.apply(session);
         sessionlog::setDetailed(loadedPreferences.values.detailedLogging);
+        automaticUpdateChecks = loadedPreferences.values.automaticUpdateChecks;
         savedPreferences = drag::Preferences::capture(session);
         savedPreferences.detailedLogging = sessionlog::detailed();
+        savedPreferences.automaticUpdateChecks = automaticUpdateChecks;
         sessionlog::info("preferences", preferenceSummary(savedPreferences));
         preferencesReady = true;
         if (!loadedPreferences.problem.empty())
@@ -884,6 +889,7 @@ static int run(const fs::path &root) {
         check(o->SetOverlayMouseScale(overlay, &scale));
         check(o->SetOverlayFlag(overlay, vr::VROverlayFlags_EnableControlBarClose, true));
         check(o->SetOverlayFlag(overlay, vr::VROverlayFlags_EnableClickStabilization, true));
+        check(o->SetOverlayFlag(overlay, vr::VROverlayFlags_SendVRDiscreteScrollEvents, true));
         if (!texture.create(vulkan, Panel::width, Panel::height, error))
             throw std::runtime_error(error);
         const auto iconPath = (root / "assets/icons/frame-advanced-settings.png").string();
@@ -897,6 +903,9 @@ static int run(const fs::path &root) {
         LogExport logExport;
         MicrophoneController microphone;
         LaunchMenuController launchMenu;
+        SettingsController settings(root, stateDirectory());
+        ps.selfUpdates = build::selfUpdates;
+        ps.automaticUpdateChecks = automaticUpdateChecks;
         launchMenu.load(ps);
         ps.appVersion = build::version;
         ps.buildId = build::id;
@@ -930,7 +939,7 @@ static int run(const fs::path &root) {
             o->ShowDashboard(appKey);
             log("Requested Frame Advanced Settings dashboard; waiting for overlay visibility.");
         };
-        showDashboard();
+        if (!background) showDashboard();
         Clock::time_point last = Clock::now(), renderAt = last, statusAt = last, watchAt = last;
         Clock::time_point recenterLogAt = last;
         Clock::time_point noticeUntil = last + std::chrono::seconds(12);
@@ -967,6 +976,13 @@ static int run(const fs::path &root) {
                 }
             }
             while (o->PollNextOverlayEvent(overlay, &event, sizeof(event))) {
+                if (event.eventType == vr::VREvent_ScrollDiscrete && ps.page == PanelPage::Settings) {
+                    ps.settingsScroll = std::clamp(ps.settingsScroll - int(event.data.scroll.ydelta * 78),
+                                                   0, Panel::settingsScrollMax);
+                    pressed = Command::None;
+                    ps.hover = Command::None;
+                    continue;
+                }
                 if (event.eventType == vr::VREvent_OverlayShown)
                     log("Frame Advanced Settings dashboard is visible.");
                 if (event.eventType == vr::VREvent_OverlayHidden)
@@ -1003,15 +1019,25 @@ static int run(const fs::path &root) {
                     switch (hit) {
                     case Command::PageSpaceDrag:
                     case Command::PageLaunchMenu:
-                    case Command::PageAbout:
                     case Command::PageMicrophone:
                     case Command::PageSettings:
-                        ps.page = hit == Command::PageAbout      ? PanelPage::About
-                                  : hit == Command::PageSettings ? PanelPage::Settings
+                        ps.page = hit == Command::PageSettings ? PanelPage::Settings
                                   : hit == Command::PageMicrophone ? PanelPage::Microphone
                                   : hit == Command::PageLaunchMenu ? PanelPage::LaunchMenu
                                                                  : PanelPage::SpaceDrag;
                         ps.hover = Command::None;
+                        break;
+                    case Command::SettingsUp:
+                    case Command::SettingsDown:
+                        ps.settingsScroll = std::clamp(ps.settingsScroll + (hit == Command::SettingsDown ? 156 : -156),
+                                                       0, Panel::settingsScrollMax);
+                        ps.hover = Command::None;
+                        break;
+                    case Command::AutoUpdateOff:
+                    case Command::AutoUpdateOn:
+                    case Command::ResetAutoUpdate:
+                        automaticUpdateChecks = hit != Command::AutoUpdateOff;
+                        ps.automaticUpdateChecks = automaticUpdateChecks;
                         break;
                     case Command::DebugLoggingOff:
                     case Command::DebugLoggingOn:
@@ -1096,6 +1122,7 @@ static int run(const fs::path &root) {
                         session.gravity.setStrength(session.gravity.strength() + 1.0);
                         break;
                     default:
+                        settings.command(hit, ps);
                         microphone.command(hit, ps);
                         launchMenu.command(hit, ps);
                         break;
@@ -1107,6 +1134,8 @@ static int run(const fs::path &root) {
             if (stopping)
                 break;
             microphone.poll(ps, o->IsOverlayVisible(overlay) && ps.page == PanelPage::Microphone);
+            settings.poll(ps, o->IsOverlayVisible(overlay) &&
+                              ps.page == PanelPage::Settings);
             if (launchMenu.poll(ps)) {
                 // A refreshed list must not turn an in-flight pointer click into
                 // a visibility change on a different shortcut in the same slot.
@@ -1225,13 +1254,15 @@ int main(int argc, char **argv) {
         if (argc == 2 && std::strcmp(argv[1], "--help") == 0) {
             std::printf("Frame Advanced Settings %s\n", build::full);
             std::puts("  --version  Print build identity without starting OpenVR.\n"
+                      "  --background  Start without opening the dashboard.\n"
                       "  --probe  Read-only runtime/playspace diagnostic; "
                       "no overlay or movement.\n  no args  Native dashboard; restores saved "
                       "preferences, including the movement on/off choice.");
             return 0;
         }
         const bool probeOnly = argc == 2 && std::strcmp(argv[1], "--probe") == 0;
-        if (argc != 1 && !probeOnly) {
+        const bool background = argc == 2 && std::strcmp(argv[1], "--background") == 0;
+        if (argc != 1 && !probeOnly && !background) {
             std::fprintf(stderr, "Unknown argument. Use --help.\n");
             return 1;
         }
@@ -1265,7 +1296,7 @@ int main(int argc, char **argv) {
         }
         std::signal(SIGINT, stop);
         std::signal(SIGTERM, stop);
-        auto result = run(root);
+        auto result = run(root, background);
         sessionlog::info("lifecycle", "Dashboard exit code=" + std::to_string(result));
         sessionlog::shutdown();
         ::close(lock);

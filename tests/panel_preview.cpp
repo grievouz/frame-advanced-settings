@@ -26,45 +26,39 @@ int main(int argc, char **argv) {
     check(Panel::hit(1500, 337) == Command::LimitLarger, "Distance limit increase hit");
     check(Panel::hit(1200, 450) == Command::None, "Gap is not clickable");
     check(Panel::hit(310, 10) == Command::None, "Background is not clickable");
-    for (const auto page : {PanelPage::SpaceDrag, PanelPage::LaunchMenu, PanelPage::Microphone, PanelPage::Settings, PanelPage::About}) {
+    for (const auto page : {PanelPage::SpaceDrag, PanelPage::LaunchMenu, PanelPage::Microphone, PanelPage::Settings}) {
         check(Panel::hit(100, 60, page) == Command::PageSpaceDrag, "Space Drag navigation");
         check(Panel::hit(100, 132, page) == Command::PageLaunchMenu, "Launch Menu navigation");
-        check(Panel::hit(100, 348, page) == Command::PageAbout, "About navigation is last");
+        check(Panel::hit(100, 348, page) == Command::None, "About lives inside Settings");
         check(Panel::hit(0, 24, page) == Command::PageSpaceDrag,
               "Sidebar row starts at the left edge");
         check(Panel::hit(339, 95, page) == Command::PageSpaceDrag,
               "Sidebar row includes the entire selected rectangle");
         check(Panel::hit(2, 276, page) == Command::PageSettings,
               "Settings row is clickable before its icon");
-        check(Panel::hit(338, 348, page) == Command::PageAbout,
-              "About row is clickable after its label");
+        check(Panel::hit(338, 348, page) == Command::None,
+              "Removed About sidebar row has no hit target");
         check(Panel::hit(340, 60, page) == Command::None,
               "Sidebar hit region does not enter the content gutter");
         check(Panel::hit(100, 96, page) == Command::PageLaunchMenu &&
                   Panel::hit(100, 168, page) == Command::PageMicrophone &&
                   Panel::hit(100, 240, page) == Command::PageSettings &&
-                  Panel::hit(100, 312, page) == Command::PageAbout,
+                  Panel::hit(100, 312, page) == Command::None,
               "Adjacent sidebar row boundaries have no gaps");
         check(Panel::hit(100, 820, page) == Command::None, "Removed Quit area is not clickable");
     }
-    check(Panel::hit(1400, 78, PanelPage::About) == Command::None,
-          "About cannot enable hidden movement controls");
     check(Panel::hit(1400, 78, PanelPage::Settings) == Command::None,
           "Settings cannot enable hidden movement controls");
-    check(Panel::hit(440, 698, PanelPage::About) == Command::None,
-          "About cannot activate hidden reset or export buttons");
     check(Panel::hit(1200, 493, PanelPage::Settings) == Command::None,
           "Settings cannot open hidden controller bindings");
-    check(Panel::hit(1180, 180, PanelPage::Settings) == Command::DebugLoggingOff,
+    check(Panel::hit(1180, 460, PanelPage::Settings) == Command::DebugLoggingOff,
           "Settings off changes logging, not movement");
-    check(Panel::hit(1400, 180, PanelPage::Settings) == Command::DebugLoggingOn,
+    check(Panel::hit(1400, 460, PanelPage::Settings) == Command::DebugLoggingOn,
           "Settings on changes logging, not movement");
     check(Panel::hit(440, 698, PanelPage::Settings) == Command::None,
           "Settings cannot activate hidden reset or old export buttons");
-    check(Panel::hit(1200, 280, PanelPage::Settings) == Command::ExportLogs,
+    check(Panel::hit(1200, 555, PanelPage::Settings) == Command::ExportLogs,
           "Compact Settings export button hit");
-    check(Panel::hit(1200, 280, PanelPage::About) == Command::None,
-          "About cannot activate hidden compact export button");
     check(Panel::hit(1180, 78, PanelPage::LaunchMenu) == Command::LaunchOff, "Launch Menu Off control");
     check(Panel::hit(1400, 78, PanelPage::LaunchMenu) == Command::LaunchOn, "Launch Menu On control");
     check(Panel::hit(1180, 214, PanelPage::LaunchMenu) == Command::LaunchHide0, "First shortcut Hide");
@@ -106,6 +100,30 @@ int main(int argc, char **argv) {
           "Encoded runtime font is rejected before rasterization");
     Panel panel(argv[2], argc == 4 ? argv[3] : "");
     {
+        PanelState settings;
+        settings.page = PanelPage::Settings;
+        settings.settingsScroll = 156;
+        check(panel.hit(1200, 304, settings) == Command::DebugLoggingOff,
+              "Scrolling keeps logging controls and their hit targets aligned");
+        check(panel.hit(1200, 100, settings) == Command::None,
+              "Scrolled controls cannot activate through the fixed heading");
+        check(panel.hit(100, 270, settings) == Command::PageSettings,
+              "Scrolling content does not move the sidebar");
+        settings.updateAvailable = true;
+        settings.updateBusy = true;
+        check(panel.hit(1400, 214, settings) == Command::None,
+              "Cannot install twice while update is busy");
+        settings.updateBusy = false;
+        check(panel.hit(1400, 214, settings) == Command::InstallUpdate,
+              "Available update can install from its scrolled row");
+        settings.selfUpdates = false;
+        check(panel.hit(1400, 214, settings) == Command::None,
+              "Steam builds have no hidden update action");
+        settings.settingsScroll = 0;
+        check(panel.hit(1180, 180, settings) == Command::None,
+              "Startup control waits for actual service state");
+    }
+    {
         PanelState resets;
         auto resetX = [&](Command command, int y) {
             for (int x = 400; x < 828; ++x)
@@ -137,7 +155,7 @@ int main(int argc, char **argv) {
               "Restoring defaults removes the reset target immediately");
         resets.page = PanelPage::Settings;
         resets.debugLogging = true;
-        check(resetX(Command::ResetDebugLogging, 180) > 400 &&
+        check(resetX(Command::ResetDebugLogging, 460) > 400 &&
                   resetX(Command::ResetGain, 259) == -1,
               "Logging reset is page scoped");
         resets.page = PanelPage::Microphone;
@@ -167,7 +185,7 @@ int main(int argc, char **argv) {
     changed.distanceLimit = true;
     check(!(changed == state), "Distance toggle redraws panel");
     changed = state;
-    changed.page = PanelPage::About;
+    changed.page = PanelPage::Settings;
     check(!(changed == state), "Navigation redraws panel");
     changed = state;
     changed.runtimeVersion = "2.15.6";
@@ -188,7 +206,7 @@ int main(int argc, char **argv) {
     check(pixel(0, 24) == 0x3d4450 && pixel(339, 95) == 0x3d4450,
           "Selected sidebar row is a full-width neutral rectangle");
     check(pixel(340, 60) == 0x0a0f14, "Selected row does not extend beyond the sidebar");
-    for (const auto row : {24, 96, 168, 240, 312}) {
+    for (const auto row : {24, 96, 168, 240}) {
         const uint32_t background = row == 24 ? 0x3d4450 : 0x22272b;
         bool iconVisible = false;
         for (int y = row + 23; y < row + 49; ++y)
@@ -217,18 +235,29 @@ int main(int argc, char **argv) {
     panel.render(state);
     check(panel.save((base / "panel-bindings.ppm").string().c_str()), "Save binding error preview");
     state.notice.clear();
-    state.page = PanelPage::About;
+    state.page = PanelPage::Settings;
     state.appVersion = build::version;
     state.buildId = build::id;
     state.buildTarget = "Linux aarch64";
     state.openVRVersion = "2.15.6";
     state.runtimeVersion = "2.15.6 (Steam Frame)";
+    state.settingsScroll = Panel::settingsScrollMax;
     panel.render(state);
     check(panel.save((base / "panel-about.ppm").string().c_str()), "Save About preview");
     state.page = PanelPage::Settings;
+    state.settingsScroll = 0;
+    state.startupAvailable = true;
+    state.updateAvailable = true;
+    state.updateStatus = "Version 0.2.0 is available.";
     state.debugLogging = true;
     panel.render(state);
     check(panel.save((base / "panel-settings.ppm").string().c_str()), "Save Settings preview");
+    state.updateBusy = true;
+    state.updateStatus = "Downloading version 0.2.0...";
+    panel.render(state);
+    check(panel.save((base / "panel-settings-updating.ppm").string().c_str()), "Save update progress preview");
+    state.updateBusy = false;
+    state.updateStatus = "Version 0.2.0 is available.";
     state.exportStatus = "Logs exported. Ready to attach to a bug report.";
     state.hover = Command::ExportLogs;
     panel.render(state);

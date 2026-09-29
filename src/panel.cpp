@@ -33,7 +33,14 @@ constexpr Button buttons[] = {
     {Command::PageLaunchMenu, 0, sidebarTop + sidebarRowHeight, sidebarWidth, sidebarRowHeight, PanelPage::LaunchMenu, true},
     {Command::PageMicrophone, 0, sidebarTop + 2 * sidebarRowHeight, sidebarWidth, sidebarRowHeight, PanelPage::Microphone, true},
     {Command::PageSettings, 0, sidebarTop + 3 * sidebarRowHeight, sidebarWidth, sidebarRowHeight, PanelPage::Settings, true},
-    {Command::PageAbout, 0, sidebarTop + 4 * sidebarRowHeight, sidebarWidth, sidebarRowHeight, PanelPage::About, true},
+    {Command::StartupOff, controlsLeft, 154, 220, rowHeight, PanelPage::Settings},
+    {Command::StartupOn, controlsLeft + 220, 154, 220, rowHeight, PanelPage::Settings},
+    {Command::AutoUpdateOff, controlsLeft, 248, 220, rowHeight, PanelPage::Settings},
+    {Command::AutoUpdateOn, controlsLeft + 220, 248, 220, rowHeight, PanelPage::Settings},
+    {Command::CheckUpdate, controlsLeft, 342, 208, rowHeight, PanelPage::Settings},
+    {Command::InstallUpdate, controlsLeft + 232, 342, 208, rowHeight, PanelPage::Settings},
+    {Command::SettingsUp, 1554, 148, 32, 40, PanelPage::Settings},
+    {Command::SettingsDown, 1554, 830, 32, 40, PanelPage::Settings},
     {Command::Disable, controlsLeft, 52, 220, rowHeight},
     {Command::Enable, controlsLeft + 220, 52, 220, rowHeight},
     {Command::Height, controlsLeft, 154, 220, rowHeight},
@@ -58,9 +65,9 @@ constexpr Button buttons[] = {
     {Command::VoiceRecord, inset, 506, 528, rowHeight, PanelPage::Microphone},
     {Command::VoicePlay, 952, 506, 280, rowHeight, PanelPage::Microphone},
     {Command::VoiceStop, 1256, 506, 280, rowHeight, PanelPage::Microphone},
-    {Command::DebugLoggingOff, controlsLeft, 154, 220, rowHeight, PanelPage::Settings},
-    {Command::DebugLoggingOn, controlsLeft + 220, 154, 220, rowHeight, PanelPage::Settings},
-    {Command::ExportLogs, controlsLeft, 256, controlsWidth, rowHeight, PanelPage::Settings},
+    {Command::DebugLoggingOff, controlsLeft, 436, 220, rowHeight, PanelPage::Settings},
+    {Command::DebugLoggingOn, controlsLeft + 220, 436, 220, rowHeight, PanelPage::Settings},
+    {Command::ExportLogs, controlsLeft, 530, controlsWidth, rowHeight, PanelPage::Settings},
     {Command::LaunchOff, controlsLeft, 52, 220, rowHeight, PanelPage::LaunchMenu},
     {Command::LaunchOn, controlsLeft + 220, 52, 220, rowHeight, PanelPage::LaunchMenu},
     {Command::LaunchHide0, controlsLeft, 188, 220, rowHeight, PanelPage::LaunchMenu},
@@ -95,6 +102,7 @@ constexpr RowReset rowResets[] = {
     {Command::ResetLimit, Command::LimitOff, "Distance limit"},
     {Command::ResetGravity, Command::GravityOff, "Gravity"},
     {Command::ResetDebugLogging, Command::DebugLoggingOff, "Detailed logging"},
+    {Command::ResetAutoUpdate, Command::AutoUpdateOff, "Check for updates automatically"},
     {Command::MicResetEcho, Command::MicEchoOff, "Echo cancellation"},
     {Command::MicResetNoise, Command::MicNoiseOff, "Noise suppression"}};
 constexpr int resetTargetSize = 36, resetLabelGap = 6;
@@ -110,6 +118,7 @@ bool rowChanged(Command command, const PanelState &s) {
         return s.gravity != defaults.gravity ||
                std::abs(s.gravityStrength - defaults.gravityStrength) > 1e-9;
     case Command::ResetDebugLogging: return s.debugLogging != defaults.detailedLogging;
+    case Command::ResetAutoUpdate: return s.selfUpdates && !s.automaticUpdateChecks;
     case Command::MicResetEcho: return s.micAvailable && !s.micEcho;
     case Command::MicResetNoise: return s.micAvailable && !s.micNoise;
     default: return false;
@@ -214,7 +223,7 @@ struct Panel::Fonts {
     }
 };
 bool PanelState::operator==(const PanelState &other) const {
-    return page == other.page && enabled == other.enabled && xyz == other.xyz &&
+    return page == other.page && settingsScroll == other.settingsScroll && enabled == other.enabled && xyz == other.xyz &&
            dragging == other.dragging && gain == other.gain && gravity == other.gravity &&
            gravityStrength == other.gravityStrength && distanceLimit == other.distanceLimit &&
            distanceLimitMeters == other.distanceLimitMeters && offset.x == other.offset.x &&
@@ -224,6 +233,10 @@ bool PanelState::operator==(const PanelState &other) const {
            buildId == other.buildId && buildTarget == other.buildTarget &&
            openVRVersion == other.openVRVersion && runtimeVersion == other.runtimeVersion &&
            debugLogging == other.debugLogging &&
+           startup == other.startup && startupAvailable == other.startupAvailable && startupBusy == other.startupBusy &&
+           selfUpdates == other.selfUpdates && automaticUpdateChecks == other.automaticUpdateChecks &&
+           updateBusy == other.updateBusy && updateAvailable == other.updateAvailable &&
+           startupStatus == other.startupStatus && updateStatus == other.updateStatus &&
            loggingStatus == other.loggingStatus && exportStatus == other.exportStatus &&
            micAvailable == other.micAvailable && micBusy == other.micBusy &&
            voiceBusy == other.voiceBusy && voiceReady == other.voiceReady && voiceStatus == other.voiceStatus &&
@@ -253,7 +266,8 @@ const std::string &Panel::fontFamily() const {
     return fonts_->family;
 }
 void Panel::blend(int x, int y, uint32_t color, float alpha) {
-    if (x < 0 || y < 0 || x >= width || y >= height || alpha <= 0)
+    y -= scrollY_;
+    if (x < 0 || y < clipTop_ || x >= width || y >= clipBottom_ || alpha <= 0)
         return;
     alpha = std::min(1.f, alpha);
     const int p = (y * width + x) * 4;
@@ -265,7 +279,8 @@ void Panel::blend(int x, int y, uint32_t color, float alpha) {
     pixels[p + 3] = 255;
 }
 void Panel::rect(int x, int y, int w, int h, uint32_t color) {
-    for (int yy = std::max(0, y); yy < std::min(height, y + h); ++yy)
+    y -= scrollY_;
+    for (int yy = std::max(clipTop_, y); yy < std::min(clipBottom_, y + h); ++yy)
         for (int xx = std::max(0, x); xx < std::min(width, x + w); ++xx) {
             const int p = (yy * width + xx) * 4;
             pixels[p] = color >> 16;
@@ -275,7 +290,7 @@ void Panel::rect(int x, int y, int w, int h, uint32_t color) {
         }
 }
 void Panel::rounded(int x, int y, int w, int h, int radius, uint32_t color) {
-    for (int yy = std::max(0, y); yy < std::min(height, y + h); ++yy)
+    for (int yy = std::max(clipTop_ + scrollY_, y); yy < std::min(clipBottom_ + scrollY_, y + h); ++yy)
         for (int xx = std::max(0, x); xx < std::min(width, x + w); ++xx) {
             const float dx = std::max(std::abs(xx + .5f - x - w * .5f) - (w * .5f - radius), 0.f);
             const float dy = std::max(std::abs(yy + .5f - y - h * .5f) - (h * .5f - radius), 0.f);
@@ -394,9 +409,7 @@ void Panel::render(const PanelState &s) {
                              std::make_tuple(Command::PageMicrophone, PanelPage::Microphone, "Microphone",
                                              sidebar_icons::Icon::Mic),
                              std::make_tuple(Command::PageSettings, PanelPage::Settings, "Settings",
-                                             sidebar_icons::Icon::Settings),
-                             std::make_tuple(Command::PageAbout, PanelPage::About, "About",
-                                             sidebar_icons::Icon::Info)}) {
+                                             sidebar_icons::Icon::Settings)}) {
         const auto command = std::get<0>(item);
         const auto &b = button(command);
         const bool active = s.page == std::get<1>(item);
@@ -415,13 +428,13 @@ void Panel::render(const PanelState &s) {
         text(74, b.y + (b.h - static_cast<int>(bodySize * 1.2)) / 2,
              std::get<2>(item), bodySize, foreground);
     }
-    const char *pageTitle = s.page == PanelPage::About      ? "About"
-                            : s.page == PanelPage::Settings ? "Settings"
+    const char *pageTitle = s.page == PanelPage::Settings ? "Settings"
                             : s.page == PanelPage::Microphone ? "Microphone"
                             : s.page == PanelPage::LaunchMenu ? "Launch Menu"
                                                             : "Space Drag";
     text(inset, 56, pageTitle, 32, primary, true);
     rect(inset, 118, contentWidth, 1, control);
+
 
     if (s.page == PanelPage::LaunchMenu) {
         const bool ready = s.launchLoaded && !s.launchBusy;
@@ -498,41 +511,53 @@ void Panel::render(const PanelState &s) {
         return;
     }
 
-    if (s.page == PanelPage::About) {
+    if (s.page == PanelPage::Settings) {
+        scrollY_ = std::clamp(s.settingsScroll, 0, settingsScrollMax);
+        clipTop_ = 138;
+        clipBottom_ = 882;
+        label(Command::StartupOff, "Start with SteamVR");
+        segment(Command::StartupOff, "Off", Command::StartupOn, "On", s.startup, s.startupAvailable && !s.startupBusy);
+        text(inset, 201, "Start automatically when the headset's VR session starts.", 18, secondary);
+        if (s.selfUpdates) {
+            label(Command::AutoUpdateOff, "Check for updates automatically");
+            segment(Command::AutoUpdateOff, "Off", Command::AutoUpdateOn, "On", s.automaticUpdateChecks);
+            text(inset, 295, "You'll choose when to install.", 18, secondary);
+            label(Command::CheckUpdate, "Updates");
+            drawButton(Command::CheckUpdate, "CHECK NOW", control, 20, !s.updateBusy);
+            drawButton(Command::InstallUpdate, "INSTALL & RESTART", control, 18, s.updateAvailable && !s.updateBusy);
+            if (!s.updateStatus.empty()) text(inset, 394, s.updateStatus, 18, secondary);
+        }
+        label(Command::DebugLoggingOff, "Detailed logging");
+        segment(Command::DebugLoggingOff, "Off", Command::DebugLoggingOn, "On", s.debugLogging);
+        text(inset, 483, "Include tracking and movement details for debugging.", 18, secondary);
+        label(Command::ExportLogs, "Bug report logs");
+        text(inset, 577, "Create an archive to attach to a bug report.", 18, secondary);
+        drawButton(Command::ExportLogs, "EXPORT LOGS");
+        const auto message = !s.startupStatus.empty() ? s.startupStatus : !s.loggingStatus.empty()
+                                ? s.loggingStatus : !s.exportStatus.empty() ? s.exportStatus : s.notice;
+        if (!message.empty()) wrapped(inset, 620, contentWidth, message, 18, secondary);
+        text(inset, 676, "About", 26, primary, true);
         const auto information = {
             std::make_pair("Version", s.appVersion),
             std::make_pair("Build", s.buildId),
             std::make_pair("Target", s.buildTarget),
             std::make_pair("OpenVR SDK", s.openVRVersion),
             std::make_pair("SteamVR runtime", s.runtimeVersion)};
-        int row = 170;
+        int row = 742;
         for (const auto &entry : information) {
-            text(inset, row, entry.first, bodySize, secondary);
-            wrapped(inset + 300, row, contentWidth - 300, entry.second, bodySize, primary);
-            rect(inset, row + 52, contentWidth, 1, surface);
-            row += 72;
+            text(inset, row, entry.first, bodySize, primary);
+            wrapped(controlsLeft, row, controlsWidth, entry.second, bodySize, secondary);
+            row += 78;
         }
-        if (!s.notice.empty())
-            wrapped(inset, 830, contentWidth, s.notice, bodySize, secondary);
+        scrollY_ = 0;
+        clipTop_ = 0;
+        clipBottom_ = height;
+        drawButton(Command::SettingsUp, "^", background, 20, s.settingsScroll > 0);
+        drawButton(Command::SettingsDown, "v", background, 20, s.settingsScroll < settingsScrollMax);
+        rounded(1566, 204, 6, 604, 3, surface);
+        rounded(1566, 204 + s.settingsScroll * 168 / settingsScrollMax, 6, 436, 3, sidebarSelected);
         return;
     }
-
-    if (s.page == PanelPage::Settings) {
-        label(Command::DebugLoggingOff, "Detailed logging");
-        segment(Command::DebugLoggingOff, "Off", Command::DebugLoggingOn, "On", s.debugLogging);
-        text(inset, 200, "Include tracking and movement details for debugging.", 18, secondary);
-        label(Command::ExportLogs, "Bug report logs");
-        text(inset, 302, "Create an archive to attach to a bug report.", 18, secondary);
-        drawButton(Command::ExportLogs, "EXPORT LOGS");
-        if (!s.exportStatus.empty())
-            wrapped(inset, 352, contentWidth, s.exportStatus, 18, secondary);
-        if (!s.loggingStatus.empty())
-            wrapped(inset, 408, contentWidth, s.loggingStatus, 18, secondary);
-        if (!s.notice.empty())
-            wrapped(inset, 830, contentWidth, s.notice, bodySize, secondary);
-        return;
-    }
-
     segment(Command::Disable, "Off", Command::Enable, "On", s.enabled);
     label(Command::Height, "Movement direction");
     segment(Command::Height, "Height only", Command::XYZ, "All axes", s.xyz);
@@ -592,6 +617,16 @@ Command Panel::hit(double x, double y, PanelPage page) {
     return Command::None;
 }
 Command Panel::hit(double x, double y, const PanelState &state) {
+    if (state.page == PanelPage::Settings && x >= sidebarWidth) {
+        if (x >= 1554) {
+            const auto fixed = hit(x, y, state.page);
+            if (fixed == Command::SettingsUp && state.settingsScroll > 0) return fixed;
+            if (fixed == Command::SettingsDown && state.settingsScroll < settingsScrollMax) return fixed;
+            return Command::None;
+        }
+        if (y < 138 || y >= 882) return Command::None;
+        y += std::clamp(state.settingsScroll, 0, settingsScrollMax);
+    }
     for (const auto &reset : rowResets) {
         const auto &anchor = button(reset.anchor);
         if (anchor.page != state.page || !rowChanged(reset.command, state) ||
@@ -601,7 +636,15 @@ Command Panel::hit(double x, double y, const PanelState &state) {
         if (x >= left && x < left + resetTargetSize && y >= top && y < top + resetTargetSize)
             return reset.command;
     }
-    return hit(x, y, state.page);
+    const auto command = hit(x, y, state.page);
+    if ((command == Command::StartupOn || command == Command::StartupOff) &&
+        (!state.startupAvailable || state.startupBusy)) return Command::None;
+    if ((command == Command::CheckUpdate || command == Command::InstallUpdate) &&
+        (!state.selfUpdates || state.updateBusy)) return Command::None;
+    if (command == Command::InstallUpdate && !state.updateAvailable) return Command::None;
+    if ((command == Command::AutoUpdateOff || command == Command::AutoUpdateOn) && !state.selfUpdates)
+        return Command::None;
+    return command;
 }
 bool Panel::save(const char *path) const {
     FILE *file = std::fopen(path, "wb");
