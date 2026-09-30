@@ -10,6 +10,14 @@ Extra controls for your Steam Frame.
 - **Launch Menu** — Choose which apps appear in the headset's **+ / Launch program** menu.
 - **Microphone** — Adjust echo cancellation and noise suppression, and test your mic with a six-second recording and playback.
 
+## Install
+
+Run this in a terminal on your Steam Frame:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/grievouz/frame-advanced-settings/main/get.sh | sh
+```
+
 ## Contributing
 
 Contributions to `frame-advanced-settings` are welcome! Please open an issue or submit a pull request on the GitHub repository.
