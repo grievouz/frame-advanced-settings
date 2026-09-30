@@ -45,8 +45,10 @@ jobs:
           key: zig-download-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.zig.outputs.sha256 }}
       - name: Check shell scripts and release validation
         run: |
-          for script in install.sh scripts/*.sh tests/*.sh; do bash -n "$script"; done
+          for script in get.sh install.sh scripts/*.sh tests/*.sh; do bash -n "$script"; done
+          sh -n get.sh
           bash tests/release_test.sh
+          bash tests/bootstrap_test.sh
       - name: Build and test
         env:
           RELEASE_VERSION: ${{ inputs.version }}
