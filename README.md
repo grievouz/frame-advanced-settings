@@ -12,13 +12,11 @@ Extra controls for your Steam Frame.
 
 ## Install
 
-Run this in a terminal on your Steam Frame, without `sudo`:
+Run this in a terminal on your Steam Frame:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/grievouz/frame-advanced-settings/main/get.sh | sh
 ```
-
-Installs the latest stable release. Open **Frame Advanced Settings** from the **+ / Launch program** menu.
 
 ## Contributing
 
