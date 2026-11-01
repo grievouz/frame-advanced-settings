@@ -14,6 +14,7 @@
 #include "microphone_controller.h"
 #include "settings_controller.h"
 #include "app_registration.h"
+#include "chaperone_backup.h"
 #include <chrono>
 #include <csignal>
 #include <cstdio>
@@ -95,6 +96,11 @@ static bool readSpace(Space &s, bool refreshWorking = true, std::string *problem
     s.pose = fromVr(m);
     if (!s.pose.valid())
         return fail("Working standing origin is not a finite rigid transform");
+    if (!c->GetWorkingSeatedZeroPoseToRawTrackingPose(&m))
+        return fail("Working seated origin query returned false");
+    s.seated = fromVr(m);
+    if (!s.seated->valid())
+        return fail("Working seated origin is not a finite rigid transform");
     std::string boundaryProblem;
     if (boundsOrigins)
         boundsOrigins->before =
@@ -162,6 +168,11 @@ static void matrix(std::ostream &f, const drag::Transform &t) {
 static void spaceJson(std::ostream &f, const Space &s) {
     f << "{\"universe\":" << s.universe << ",\"standing_to_raw\":";
     matrix(f, s.pose);
+    f << ",\"seated_to_raw\":";
+    if (s.seated)
+        matrix(f, *s.seated);
+    else
+        f << "null";
     f << ",\"bounds\":[";
     for (size_t i = 0; i < s.bounds.size(); i++) {
         if (i)
@@ -241,7 +252,7 @@ struct MotionSample {
 class OpenVRSpaceAccess : public drag::SpaceAccess {
     Space original_;
     bool preview_ = false;
-    bool boundsReexpressionLogged_ = false, runtimeBoundsLogged_ = false, mismatchSaved_ = false;
+    bool mismatchSaved_ = false;
     std::optional<Space> rawRead_, submitted_;
     std::optional<drag::RuntimeBoundsOrigins> boundsOrigins_;
     std::string readProblem_;
@@ -401,20 +412,8 @@ class OpenVRSpaceAccess : public drag::SpaceAccess {
             lastReadAt_ = std::chrono::duration_cast<std::chrono::milliseconds>(
                               std::chrono::system_clock::now().time_since_epoch())
                               .count();
-            if (preview_) {
+            if (preview_)
                 boundsOrigins_ = sampledOrigins;
-                const auto match = drag::normalizePreviewBounds(result, original_, &sampledOrigins);
-                if (match == drag::BoundsMatch::Reexpressed && !boundsReexpressionLogged_) {
-                    log("Boundary coordinates follow the preview origin; all corners match the "
-                        "baseline in raw space. Normalizing readback only.");
-                    boundsReexpressionLogged_ = true;
-                }
-                if (match == drag::BoundsMatch::RuntimeReexpressed && !runtimeBoundsLogged_) {
-                    log("Live boundary coordinates use the runtime origin at the baseline floor; "
-                        "all corners match in raw space. Kept the working movement offset.");
-                    runtimeBoundsLogged_ = true;
-                }
-            }
         }
         if (!resultOk && problem != readProblem_)
             log("Playspace read: " + problem);
@@ -426,7 +425,7 @@ class OpenVRSpaceAccess : public drag::SpaceAccess {
         if (!backup(original))
             return false;
         original_ = original;
-        boundsReexpressionLogged_ = runtimeBoundsLogged_ = mismatchSaved_ = false;
+        mismatchSaved_ = false;
         submitted_.reset();
         return true;
     }
@@ -505,17 +504,89 @@ class OpenVRSpaceAccess : public drag::SpaceAccess {
         vr::VRChaperoneSetup()->RevertWorkingCopy();
         preview_ = false;
     }
-    bool write(const Space &target, drag::WriteMode mode) override {
+    void recoveryLog(const std::string &message) override {
+        sessionlog::info("playspace", message);
+    }
+    uint64_t currentUniverse() override {
+        vr::ETrackedPropertyError error = vr::TrackedProp_Success;
+        const auto id = vr::VRSystem()->GetUint64TrackedDeviceProperty(
+            vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_CurrentUniverseId_Uint64, &error);
+        return error == vr::TrackedProp_Success ? id : 0;
+    }
+    bool headTracked() override {
+        vr::TrackedDevicePose_t pose{};
+        vr::VRSystem()->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseRawAndUncalibrated, 0,
+                                                        &pose, 1);
+        return pose.bPoseIsValid && pose.bDeviceIsConnected &&
+               pose.eTrackingResult == vr::TrackingResult_Running_OK;
+    }
+    bool liveStanding(drag::Transform &result) override {
+        // Bracket the standing pose with raw samples. Skip a moving head or a
+        // tracking transition rather than attributing sampling skew to SteamVR.
+        const auto id = currentUniverse();
+        if (!id || id == drag::temporaryUniverse)
+            return false;
+        vr::TrackedDevicePose_t before{}, standing{}, after{};
+        auto system = vr::VRSystem();
+        system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseRawAndUncalibrated, 0, &before,
+                                                1);
+        system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &standing, 1);
+        system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseRawAndUncalibrated, 0, &after,
+                                                1);
+        for (const auto *pose : {&before, &standing, &after})
+            if (!pose->bPoseIsValid || !pose->bDeviceIsConnected ||
+                pose->eTrackingResult != vr::TrackingResult_Running_OK)
+                return false;
+        const auto a = fromVr(before.mDeviceToAbsoluteTracking);
+        const auto b = fromVr(after.mDeviceToAbsoluteTracking);
+        const auto s = fromVr(standing.mDeviceToAbsoluteTracking);
+        if (!drag::near(a, b, .001) || !s.valid() || id != currentUniverse())
+            return false;
+        // rawFromStanding = rawFromHead * inverse(standingFromHead).
+        const auto inverse = s.inverse();
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j) {
+                result.r[i][j] = 0;
+                for (int k = 0; k < 3; ++k)
+                    result.r[i][j] += a.r[i][k] * inverse.r[k][j];
+            }
+        result.t = a.point(inverse.t);
+        return result.valid();
+    }
+    bool reanchor(const Space &saved) override {
+        if (preview_ || !headTracked() || saved.universe == drag::temporaryUniverse ||
+            currentUniverse() != saved.universe)
+            return false;
+        const char *home = std::getenv("HOME");
+        const char *xdg = std::getenv("XDG_CONFIG_HOME");
+        if ((!xdg || !*xdg) && (!home || !*home))
+            return false;
+        const fs::path config = xdg && *xdg ? fs::path(xdg) : fs::path(home) / ".config";
+        const auto copy = chaperonebackup::save(config, stateDirectory());
+        if (!copy) {
+            sessionlog::warn("playspace",
+                             "No verified chaperone file backup; skipping floor repair.");
+            return false;
+        }
+        Space current;
+        // Revert and re-read after the file operation; never commit a moving
+        // preview, a new tracking universe, or another program's changed origin.
+        if (!read(current) || !drag::same(current, saved) ||
+            chaperonebackup::read(copy->source) != std::optional<std::string>{copy->contents} ||
+            !headTracked() || currentUniverse() != saved.universe)
+            return false;
+        sessionlog::info("playspace", "Saved calibration backup: " + copy->copy.string());
+        return vr::VRChaperoneSetup()->CommitWorkingCopy(vr::EChaperoneConfigFile_Live);
+    }
+    bool write(const Space &target) override {
         submitted_ = target;
         // Passing through zero during motion is still a preview. Hiding it here
         // exposes the live Frame origin and can look like an external recenter.
-        if (mode == drag::WriteMode::Restore && drag::same(target, original_)) {
-            cancelPreview();
-            return true;
-        }
         auto c = vr::VRChaperoneSetup();
         auto pose = toVr(target.pose);
         c->SetWorkingStandingZeroPoseToRawTrackingPose(&pose);
+        // Standing-only movement matches the original drag behavior. Moving
+        // the seated origin as well can move Frame's room-space overlays.
         // OVRAS uses this API for ordinary motion. It previews the working origin
         // in the compositor without a disk commit or a rewrite of boundary quads.
         // This void API only confirms submission; visible behavior needs a Frame test.
@@ -939,9 +1010,9 @@ static int run(const fs::path &root, bool background) {
             o->ShowDashboard(appKey);
             log("Requested Frame Advanced Settings dashboard; waiting for overlay visibility.");
         };
-        if (!background) showDashboard();
+        if (!background)
+            showDashboard();
         Clock::time_point last = Clock::now(), renderAt = last, statusAt = last, watchAt = last;
-        Clock::time_point recenterLogAt = last;
         Clock::time_point noticeUntil = last + std::chrono::seconds(12);
         Command pressed = Command::None;
         bool inputErrorLogged = false;
@@ -952,33 +1023,39 @@ static int run(const fs::path &root, bool background) {
             const double dt = std::chrono::duration<double>(now - last).count();
             last = now;
             vr::VREvent_t event{};
-            bool seatedReset = false, standingReset = false;
             while (vr::VRSystem()->PollNextEvent(&event, sizeof(event))) {
                 if (event.eventType == vr::VREvent_Quit) {
                     vrQuit = true;
                     stopping = 1;
                 }
-                seatedReset |= event.eventType == vr::VREvent_SeatedZeroPoseReset;
-                standingReset |= event.eventType == vr::VREvent_StandingZeroPoseReset;
-            }
-            if (!stopping && (seatedReset || standingReset) &&
-                (session.enabled || session.needsRestore())) {
-                const auto runtimeOrigin =
-                    fromVr(vr::VRSystem()->GetRawZeroPoseToStandingAbsoluteTrackingPose());
-                const bool known = session.recenter(runtimeOrigin);
-                if (!known || now >= recenterLogAt) {
-                    log(std::string("Recenter notification (seated=") +
-                        (seatedReset ? "yes" : "no") +
-                        ", standing=" + (standingReset ? "yes" : "no") + "): " +
-                        (known ? "standing data matches baseline/our preview; kept movement state."
-                               : session.status));
-                    recenterLogAt = now + std::chrono::seconds(2);
+                if (stopping)
+                    break;
+                switch (event.eventType) {
+                case vr::VREvent_SeatedZeroPoseReset:
+                case vr::VREvent_StandingZeroPoseReset:
+                    session.event(drag::SpaceEvent::Reset);
+                    break;
+                case vr::VREvent_ChaperoneUniverseHasChanged:
+                case vr::VREvent_ChaperoneDataHasChanged:
+                    session.event(drag::SpaceEvent::DataChanged);
+                    break;
+                case vr::VREvent_ChaperoneFlushCache:
+                    session.event(drag::SpaceEvent::FlushCache);
+                    break;
+                case vr::VREvent_ChaperoneRoomSetupStarting:
+                    session.event(drag::SpaceEvent::SetupStarted);
+                    break;
+                case vr::VREvent_ChaperoneRoomSetupCommitted:
+                    session.event(drag::SpaceEvent::SetupFinished);
+                    break;
                 }
             }
             while (o->PollNextOverlayEvent(overlay, &event, sizeof(event))) {
-                if (event.eventType == vr::VREvent_ScrollDiscrete && ps.page == PanelPage::Settings) {
-                    ps.settingsScroll = std::clamp(ps.settingsScroll - int(event.data.scroll.ydelta * 78),
-                                                   0, Panel::settingsScrollMax);
+                if (event.eventType == vr::VREvent_ScrollDiscrete &&
+                    ps.page == PanelPage::Settings) {
+                    ps.settingsScroll =
+                        std::clamp(ps.settingsScroll - int(event.data.scroll.ydelta * 78), 0,
+                                   Panel::settingsScrollMax);
                     pressed = Command::None;
                     ps.hover = Command::None;
                     continue;
@@ -1004,8 +1081,7 @@ static int run(const fs::path &root, bool background) {
                     continue;
                 if (event.data.mouse.button != vr::VRMouseButton_Left)
                     continue;
-                auto hit =
-                    panel.hit(event.data.mouse.x, Panel::height - event.data.mouse.y, ps);
+                auto hit = panel.hit(event.data.mouse.x, Panel::height - event.data.mouse.y, ps);
                 ps.hover = hit;
                 if (event.eventType == vr::VREvent_MouseButtonDown)
                     pressed = hit;
@@ -1021,16 +1097,17 @@ static int run(const fs::path &root, bool background) {
                     case Command::PageLaunchMenu:
                     case Command::PageMicrophone:
                     case Command::PageSettings:
-                        ps.page = hit == Command::PageSettings ? PanelPage::Settings
+                        ps.page = hit == Command::PageSettings     ? PanelPage::Settings
                                   : hit == Command::PageMicrophone ? PanelPage::Microphone
                                   : hit == Command::PageLaunchMenu ? PanelPage::LaunchMenu
-                                                                 : PanelPage::SpaceDrag;
+                                                                   : PanelPage::SpaceDrag;
                         ps.hover = Command::None;
                         break;
                     case Command::SettingsUp:
                     case Command::SettingsDown:
-                        ps.settingsScroll = std::clamp(ps.settingsScroll + (hit == Command::SettingsDown ? 156 : -156),
-                                                       0, Panel::settingsScrollMax);
+                        ps.settingsScroll = std::clamp(
+                            ps.settingsScroll + (hit == Command::SettingsDown ? 156 : -156), 0,
+                            Panel::settingsScrollMax);
                         ps.hover = Command::None;
                         break;
                     case Command::AutoUpdateOff:
@@ -1082,9 +1159,11 @@ static int run(const fs::path &root, bool background) {
                     case Command::ResetGravity: {
                         resetSpaceDragSetting(hit, session);
                         const char *row = hit == Command::ResetDirection ? "movement direction"
-                                          : hit == Command::ResetGain ? "drag speed"
-                                          : hit == Command::ResetLimit ? "distance limit" : "gravity";
-                        sessionlog::info("preferences", std::string("Reset ") + row + " to defaults");
+                                          : hit == Command::ResetGain    ? "drag speed"
+                                          : hit == Command::ResetLimit   ? "distance limit"
+                                                                         : "gravity";
+                        sessionlog::info("preferences",
+                                         std::string("Reset ") + row + " to defaults");
                         break;
                     }
                     case Command::Height:
@@ -1134,8 +1213,7 @@ static int run(const fs::path &root, bool background) {
             if (stopping)
                 break;
             microphone.poll(ps, o->IsOverlayVisible(overlay) && ps.page == PanelPage::Microphone);
-            settings.poll(ps, o->IsOverlayVisible(overlay) &&
-                              ps.page == PanelPage::Settings);
+            settings.poll(ps, o->IsOverlayVisible(overlay) && ps.page == PanelPage::Settings);
             if (launchMenu.poll(ps)) {
                 // A refreshed list must not turn an in-flight pointer click into
                 // a visibility change on a different shortcut in the same slot.
@@ -1173,11 +1251,9 @@ static int run(const fs::path &root, bool background) {
             } else
                 inputErrorLogged = false;
             if (now >= watchAt) {
-                if ((session.enabled || session.needsRestore() || session.startupEnablePending()) &&
-                    vr::VRApplications()->GetApplicationProcessId("openvr.tool.steamvr_room_setup"))
-                    session.abandon("Room setup opened. Movement paused.");
-                else
-                    session.watch(!dashboard && inputOk && input.d.bActive && !input.d.bState);
+                session.roomSetupActive(vr::VRApplications()->GetApplicationProcessId(
+                                            "openvr.tool.steamvr_room_setup") != 0);
+                session.watch();
                 watchAt = now + std::chrono::milliseconds(100);
             }
             if (inputOk && input.r.bActive && input.r.bState && input.r.bChanged) {
@@ -1245,7 +1321,7 @@ static int run(const fs::path &root, bool background) {
 int main(int argc, char **argv) {
     try {
         if (argc == 3 && (std::strcmp(argv[1], "--voice-record-helper") == 0 ||
-                         std::strcmp(argv[1], "--voice-play-helper") == 0))
+                          std::strcmp(argv[1], "--voice-play-helper") == 0))
             return voiceclip::helper(std::strcmp(argv[1], "--voice-record-helper") == 0, argv[2]);
         if (argc == 2 && std::strcmp(argv[1], "--version") == 0) {
             std::printf("Frame Advanced Settings %s\n", build::full);

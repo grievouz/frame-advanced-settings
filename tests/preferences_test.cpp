@@ -31,7 +31,7 @@ struct Runtime : drag::SpaceAccess {
         result = current;
         return readable;
     }
-    bool write(const drag::Space &target, drag::WriteMode) override {
+    bool write(const drag::Space &target) override {
         ++calls;
         ++writes;
         current = target;
@@ -134,8 +134,9 @@ int main() {
     check(savePreferences(path, preferences, problem) && problem.empty(),
           "first preference change creates the directory and settings file");
     loaded = loadPreferences(path);
-    check(loaded.found && loaded.problem.empty() && loaded.values == preferences,
-          "all preferences including drag speed above 2x and unlimited distance round-trip exactly");
+    check(
+        loaded.found && loaded.problem.empty() && loaded.values == preferences,
+        "all preferences including drag speed above 2x and unlimited distance round-trip exactly");
     {
         auto diagnosticPreferences = preferences;
         diagnosticPreferences.detailedLogging = false;
@@ -197,10 +198,11 @@ int main() {
     startup.watch();
     check(!startup.enabled && !startup.startupEnablePending(),
           "Off while startup activation is pending prevents automatic re-enabling");
-    preferences.apply(startup);
+    Session noBackup(startupRuntime);
+    preferences.apply(noBackup);
     startupRuntime.backupOk = false;
-    check(!startup.watch() && !startup.enabled && !startup.startupEnablePending() &&
-              startup.movementRequested(),
+    check(!noBackup.watch() && !noBackup.enabled && !noBackup.startupEnablePending() &&
+              noBackup.movementRequested(),
           "failed startup backup stops activation without erasing the saved preference");
 
     auto changed = preferences;
@@ -238,7 +240,8 @@ int main() {
     check(!loaded.values.movementEnabled,
           "old preference files without movement_enabled default to Off");
     write(path, "movement_enabled=true\n");
-    check(loadPreferences(path).values.movementEnabled && loadPreferences(path).values.detailedLogging,
+    check(loadPreferences(path).values.movementEnabled &&
+              loadPreferences(path).values.detailedLogging,
           "saved movement choice restores and missing detailed_logging defaults to On");
     write(path, "movement_enabled=maybe\n");
     loaded = loadPreferences(path);

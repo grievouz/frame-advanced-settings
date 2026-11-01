@@ -157,6 +157,10 @@ class Engine {
         offset = {};
         release();
     }
+    void reanchor() {
+        release();
+        requireRelease_ = false;
+    }
     bool held() const { return held_; }
     Vec releasedVelocity() const { return releasedVelocity_; }
     // Raw tracking poses do not include the offset we just applied. This avoids feedback.
